@@ -132,6 +132,17 @@ found:
     return 0;
   }
 
+  void *mem = kalloc();
+  if(mem == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  p->shared_syscall_page = (struct usyscall *)mem;
+  // Set up shared syscall page
+  p->shared_syscall_page->pid = p->pid;
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -139,6 +150,7 @@ found:
     release(&p->lock);
     return 0;
   }
+
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
@@ -158,6 +170,11 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  if(p->shared_syscall_page)
+    kfree((void *)p->shared_syscall_page);
+  p->shared_syscall_page = 0;
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -182,6 +199,16 @@ proc_pagetable(struct proc *p)
   pagetable = uvmcreate();
   if(pagetable == 0)
     return 0;
+  
+  int perms = PTE_R | PTE_U; 
+
+  uint64 phys_addr = (uint64)p->shared_syscall_page;
+
+  // map the shared syscall page
+  if(mappages(pagetable, USYSCALL, PGSIZE, phys_addr, perms) < 0) {
+      uvmfree(pagetable, 0);
+      return 0;
+  }
 
   // map the trampoline code (for system call return)
   // at the highest user virtual address.
@@ -212,6 +239,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 
