@@ -137,10 +137,12 @@ printfinit(void)
 void
 backtrace(void)
 {
-  uint64 fp_address = r_fp();
+  uint64 frame_pointer_addr = r_fp();
+  uint64 start_page_addr = PGROUNDDOWN(frame_pointer_addr);
+  
   printf("backtrace:\n");
-  while(fp_address != PGROUNDDOWN(fp_address)) {
-    printf("%p\n", *(uint64*)(fp_address-8));
-    fp_address = *(uint64*)(fp_address - 16);
+  while(frame_pointer_addr != PGROUNDDOWN(frame_pointer_addr) && PGROUNDDOWN(frame_pointer_addr) == start_page_addr) {
+    printf("%p\n", *(uint64*)(frame_pointer_addr-8));
+    frame_pointer_addr = *(uint64*)(frame_pointer_addr - 16);
   }
 }
