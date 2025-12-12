@@ -74,28 +74,46 @@ sys_sleep(void)
 int
 sys_pgaccess(void)
 {
-  // lab pgtbl: your code here.
-  int start_va, num_pages;
-  uint64 buffer_addr;
+  uint64 start_addr;
+  int num_pages;
+  uint64 user_buffer_addr;
 
-  argint(0, &start_va);
+  // Get system call arguments
+  argaddr(0, &start_addr);
   argint(1, &num_pages);
-  argaddr(2, &buffer_addr);
+  argaddr(2, &user_buffer_addr);
+  
+  // Validate num_pages (must fit in a 64-bit bitmask)
+  if (num_pages < 0 || num_pages > 64) {
+    return -1;
+  }
     
-  uint64 buf = 0; // Initialize buffer to 0
-  pte_t *pte;
+  uint64 access_bitmask = 0;
+  struct proc *current_proc = myproc();
 
-  struct proc *p = myproc(); // Get current process
+  // Check each page for access bit
   for (int i = 0; i < num_pages; i++) {
-    uint64 va = (uint64)(start_va + i * PGSIZE); // Cast to uint64
-    pte = walk(p->pagetable, va, 0);
+    uint64 page_addr = start_addr + i * PGSIZE;
+    pte_t *page_entry = walk(current_proc->pagetable, page_addr, 0);
 
-    if (*pte & PTE_V && *pte & PTE_A) {
-      buf |= (1ULL << i); // Set the corresponding bit in the buffer if page is accessed
-      *pte &= ~PTE_A; // Clear the access bit
+    // Check if PTE exists and is valid
+    if (page_entry == 0) {
+      continue; // Skip non-existent pages
+    }
+
+    // Check if page is valid and has been accessed
+    if ((*page_entry & PTE_V) && (*page_entry & PTE_A)) {
+      access_bitmask |= (1ULL << i);
+      *page_entry &= ~PTE_A; // Clear the access bit
     }
   }
-  copyout(p->pagetable, buffer_addr, (char *)&buf, sizeof(buf)); // Cast buffer_addr to uint64
+
+  // Copy result back to user space
+  if (copyout(current_proc->pagetable, user_buffer_addr, 
+              (char *)&access_bitmask, sizeof(access_bitmask)) < 0) {
+    return -1;
+  }
+
   return 0;
 }
 #endif
