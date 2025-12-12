@@ -449,3 +449,36 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+// Recursively print page table levels.
+void
+vmprint_level(pagetable_t pt, int level)
+{
+  // RISC-V page table size is 512 entries
+  for(int idx = 0; idx < 512; idx++){
+    pte_t pte = pt[idx];
+
+    if(pte & PTE_V){
+      for(int k = 0; k < (3 - level); k++) {
+        printf("..");
+      }
+
+      uint64 child_pa = PTE2PA(pte); 
+
+      printf("%d: pte %p pa %p\n", idx, pte, child_pa);
+
+      if(level > 0){
+        pagetable_t child_pt = (pagetable_t)child_pa;
+        vmprint_level(child_pt, level - 1);
+      }
+    }
+  }
+}
+
+void
+vmprint(pagetable_t pagetable)
+{
+  printf("page table %p\n", pagetable);
+  
+  vmprint_level(pagetable, 2);
+}
